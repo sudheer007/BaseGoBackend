@@ -1,0 +1,397 @@
+basePath: /
+definitions:
+  api.CreateOrganizationRequest:
+    properties:
+      address:
+        $ref: '#/definitions/models.Address'
+      allowedDomains:
+        items:
+          type: string
+        type: array
+      contactEmail:
+        type: string
+      contactPhone:
+        type: string
+      displayName:
+        type: string
+      industry:
+        type: string
+      logo:
+        type: string
+      maxUsers:
+        type: integer
+      name:
+        type: string
+      primaryDomain:
+        type: string
+      settings:
+        $ref: '#/definitions/models.OrgSettings'
+      tenantId:
+        type: string
+      website:
+        type: string
+    required:
+    - contactEmail
+    - displayName
+    - name
+    - primaryDomain
+    - tenantId
+    type: object
+  api.OrganizationResponse:
+    properties:
+      address:
+        $ref: '#/definitions/models.Address'
+      allowedDomains:
+        items:
+          type: string
+        type: array
+      contactEmail:
+        type: string
+      contactPhone:
+        type: string
+      createdAt:
+        type: string
+      displayName:
+        type: string
+      id:
+        type: string
+      industry:
+        type: string
+      logo:
+        type: string
+      maxUsers:
+        type: integer
+      name:
+        type: string
+      primaryDomain:
+        type: string
+      settings:
+        $ref: '#/definitions/models.OrgSettings'
+      status:
+        type: string
+      tenantId:
+        type: string
+      updatedAt:
+        type: string
+      website:
+        type: string
+    type: object
+  api.PaginatedOrganizationsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.OrganizationResponse'
+        type: array
+      page:
+        type: integer
+      pageSize:
+        type: integer
+      totalCount:
+        type: integer
+    type: object
+  api.ResponseError:
+    properties:
+      error:
+        type: string
+    type: object
+  api.UpdateOrganizationRequest:
+    properties:
+      address:
+        $ref: '#/definitions/models.Address'
+      allowedDomains:
+        items:
+          type: string
+        type: array
+      contactEmail:
+        type: string
+      contactPhone:
+        type: string
+      displayName:
+        type: string
+      industry:
+        type: string
+      logo:
+        type: string
+      maxUsers:
+        type: integer
+      name:
+        type: string
+      primaryDomain:
+        type: string
+      settings:
+        $ref: '#/definitions/models.OrgSettings'
+      status:
+        type: string
+      website:
+        type: string
+    required:
+    - contactEmail
+    - displayName
+    - name
+    - primaryDomain
+    type: object
+  models.Address:
+    properties:
+      city:
+        type: string
+      country:
+        type: string
+      postalCode:
+        type: string
+      state:
+        type: string
+      street:
+        type: string
+    type: object
+  models.OrgSettings:
+    properties:
+      allowCrossOrgDataAccess:
+        type: boolean
+      allowedIpRanges:
+        type: string
+      enableFieldLevelAudit:
+        type: boolean
+      enableIpRestriction:
+        type: boolean
+      enableResourceAudit:
+        type: boolean
+      enableUserAudit:
+        type: boolean
+      maxLoginAttempts:
+        type: integer
+      passwordComplexity:
+        description: low, medium, high
+        type: string
+      passwordMinLength:
+        type: integer
+      passwordRotationDays:
+        type: integer
+      requireMfa:
+        type: boolean
+      sessionTimeoutMinutes:
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+    url: http://www.example.com/support
+  description: A secure Go backend API with Swagger.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: GoBackend API
+  version: "1.0"
+paths:
+  /api/v1/organizations:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of organizations
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Page size (default: 20, max: 100)'
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.PaginatedOrganizationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+      security:
+      - BearerAuth: []
+      summary: Get a list of organizations
+      tags:
+      - organizations
+    post:
+      consumes:
+      - application/json
+      description: Create a new organization
+      parameters:
+      - description: Organization to create
+        in: body
+        name: organization
+        required: true
+        schema:
+          $ref: '#/definitions/api.CreateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.OrganizationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+      security:
+      - BearerAuth: []
+      summary: Create a new organization
+      tags:
+      - organizations
+  /api/v1/organizations/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an organization by ID
+      parameters:
+      - description: Organization ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+      security:
+      - BearerAuth: []
+      summary: Delete an organization
+      tags:
+      - organizations
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about an organization
+      parameters:
+      - description: Organization ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.OrganizationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+      security:
+      - BearerAuth: []
+      summary: Get an organization by ID
+      tags:
+      - organizations
+    put:
+      consumes:
+      - application/json
+      description: Update an existing organization
+      parameters:
+      - description: Organization ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Organization data to update
+        in: body
+        name: organization
+        required: true
+        schema:
+          $ref: '#/definitions/api.UpdateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.OrganizationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ResponseError'
+      security:
+      - BearerAuth: []
+      summary: Update an organization
+      tags:
+      - organizations
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -1,0 +1,11 @@
+---
+description: backed secure rule.
+globs: 
+alwaysApply: false
+---
+
+Always create higly secure code following the best coding practices like OWASP 10 coding principles. And it should be following Soc2 type 2 and other top compliances while creating the code.
+This will be an enterprise application so it should be highly secure and fast while reading and writing records. GDPR, ISO 27001 and Soc 2 type 2 are the compliances which you should follow while giving code.
+Don't give build and compilation errors.
+
+
