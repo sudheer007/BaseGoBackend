@@ -15,7 +15,7 @@
         },
         "version": "1.0"
     },
-    "host": "localhost:8080",
+    "host": "137.184.47.225:8080",
     "basePath": "/",
     "paths": {
         "/api/v1/organizations": {

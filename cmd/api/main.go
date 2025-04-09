@@ -31,7 +31,7 @@ import (
 // @license.name  Apache 2.0
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host      localhost:8080
+// @host  137.184.47.225:8080
 // @BasePath  /
 
 // @securityDefinitions.apikey BearerAuth
@@ -44,7 +44,7 @@ func main() {
 	docs.SwaggerInfo.Title = "GoBackend API"
 	docs.SwaggerInfo.Description = "A secure Go backend API with Organization CRUD operations"
 	docs.SwaggerInfo.Version = "1.0"
-	docs.SwaggerInfo.Host = "localhost:8080"
+	docs.SwaggerInfo.Host = "137.184.47.225:8080"
 	docs.SwaggerInfo.BasePath = ""
 	docs.SwaggerInfo.Schemes = []string{"http", "https"}
 
@@ -62,10 +62,10 @@ func main() {
 	defer db.Close()
 
 	// Create database schema
-	if err := db.CreateSchema(); err != nil {
+	/*if err := db.CreateSchema(); err != nil {
 		log.Fatalf("Failed to create database schema: %v", err)
 	}
-
+	*/
 	// Initialize encryption service
 	var encryptionSvc *security.EncryptionService
 	if cfg.Security.FieldEncryption {
@@ -96,7 +96,7 @@ func main() {
 
 	// Start the server
 	fmt.Printf("Starting server on port %d...\n", cfg.App.Port)
-	fmt.Printf("Swagger documentation available at: http://localhost:%d/swagger/index.html\n", cfg.App.Port)
+	fmt.Printf("Swagger documentation available at: http://137.184.47.225:8080/swagger/index.html\n", cfg.App.Port)
 	if err := router.Run(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

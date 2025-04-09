@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"os"
@@ -33,7 +34,19 @@ func New(cfg *config.Config) (*DB, error) {
 		Password: cfg.Database.Password,
 		Database: cfg.Database.Name,
 		PoolSize: cfg.Database.MaxConnections,
+		TLSConfig: nil,
 	}
+
+	if cfg.Database.SSLMode == "require" || cfg.Database.SSLMode == "verify-ca" || cfg.Database.SSLMode == "verify-full" {
+        		dbCfg.TLSConfig = &tls.Config{
+        			InsecureSkipVerify: cfg.Database.SSLMode == "require", // For 'require', skip verification. Needs CA for others.
+        }
+        	log.Printf("TLS enabled for database connection (SSLMode: %s)", cfg.Database.SSLMode)
+        } else {
+        	 log.Printf("TLS disabled for database connection (SSLMode: %s)", cfg.Database.SSLMode)
+        	}
+
+        log.Printf("Connecting to database at %s with user %s", dbCfg.Addr, dbCfg.User)
 
 	db := pg.Connect(dbCfg)
 
@@ -69,8 +82,8 @@ func (db *DB) CreateSchema() error {
 	models := []interface{}{
 		(*models.Tenant)(nil),
 		(*models.Organization)(nil),
-		(*models.Team)(nil),
-		(*models.TeamMember)(nil),
+//		(*models.Team)(nil),
+//		(*models.TeamMember)(nil),
 		(*models.User)(nil),
 		(*models.AuditLog)(nil),
 	}
