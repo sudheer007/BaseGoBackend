@@ -7,6 +7,7 @@ import (
 
 	"gobackend/internal/auth"
 	"gobackend/internal/middleware"
+	"gobackend/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -261,5 +262,120 @@ func (r *Router) ListAuditLogs(c *gin.Context) {
 	// This is a placeholder implementation and would need to be connected to an audit service
 	c.JSON(http.StatusOK, gin.H{
 		"message": "List audit logs endpoint",
+	})
+}
+
+// Signup handles user registration
+func (r *Router) Signup(c *gin.Context) {
+	var req auth.SignupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ResponseError{
+			Error: "Invalid request: " + err.Error(),
+		})
+		return
+	}
+
+	// Get client info for audit
+	ipAddress := middleware.ClientIP(c)
+	userAgent := c.GetHeader("User-Agent")
+
+	// Attempt signup
+	resp, err := r.AuthService.Signup(c.Request.Context(), req, ipAddress, userAgent)
+	if err != nil {
+		status := http.StatusInternalServerError
+
+		// Map specific errors to appropriate status codes
+		switch err {
+		case auth.ErrEmailAlreadyExists:
+			status = http.StatusConflict
+		case auth.ErrInvalidEmail, auth.ErrInvalidPassword:
+			status = http.StatusBadRequest
+		case auth.ErrTenantNotFound, auth.ErrOrganizationNotFound:
+			status = http.StatusNotFound
+		}
+
+		c.JSON(status, ResponseError{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, resp)
+}
+
+// UpdateUserRoleRequest represents the request to update a user's role
+type UpdateUserRoleRequest struct {
+	Role string `json:"role" binding:"required"`
+}
+
+// UpdateUserRole handles updating a user's role
+func (r *Router) UpdateUserRole(c *gin.Context) {
+	// Parse user ID from URL
+	userIDStr := c.Param("id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ResponseError{
+			Error: "Invalid user ID",
+		})
+		return
+	}
+
+	// Parse request body
+	var req UpdateUserRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ResponseError{
+			Error: "Invalid request: " + err.Error(),
+		})
+		return
+	}
+
+	// Get the current user ID from context for audit
+	currentUserIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ResponseError{
+			Error: "User not authenticated",
+		})
+		return
+	}
+
+	currentUserID, err := uuid.Parse(currentUserIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ResponseError{
+			Error: "Invalid current user ID",
+		})
+		return
+	}
+
+	// Get client info for audit
+	ipAddress := middleware.ClientIP(c)
+	userAgent := c.GetHeader("User-Agent")
+
+	// Update the role
+	err = r.AuthService.UpdateUserRole(
+		c.Request.Context(),
+		userID,
+		models.Role(req.Role),
+		currentUserID,
+		ipAddress,
+		userAgent,
+	)
+
+	if err != nil {
+		status := http.StatusInternalServerError
+
+		if err.Error() == "user not found" {
+			status = http.StatusNotFound
+		} else if err.Error() == "invalid role" {
+			status = http.StatusBadRequest
+		}
+
+		c.JSON(status, ResponseError{
+			Error: "Failed to update role: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User role updated successfully",
 	})
 }

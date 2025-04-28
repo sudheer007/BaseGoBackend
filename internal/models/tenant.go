@@ -7,17 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Tenant represents a tenant in the multi-tenant system
-type Tenant struct {
-	ID        uuid.UUID `pg:"id,type:uuid,pk"`
-	Name      string    `pg:"name,notnull"`
-	Domain    string    `pg:"domain,unique,notnull"`
-	Active    bool      `pg:"active,notnull,default:true"`
-	Settings  Settings  `pg:"settings,type:jsonb"`
-	CreatedAt time.Time `pg:"created_at,notnull,default:now()"`
-	UpdatedAt time.Time `pg:"updated_at,notnull,default:now()"`
-}
-
 // Settings represents tenant-specific settings
 type Settings struct {
 	MaxUsers          int    `json:"maxUsers"`
@@ -28,6 +17,17 @@ type Settings struct {
 	PasswordMinLength int    `json:"passwordMinLength"`
 	PasswordExpiry    int    `json:"passwordExpiry"`
 	MFARequired       bool   `json:"mfaRequired"`
+}
+
+// Tenant represents a tenant in the multi-tenant system
+type Tenant struct {
+	ID        uuid.UUID `pg:"id,type:uuid,pk"`
+	Name      string    `pg:"name,notnull"`
+	Domain    string    `pg:"domain,unique,notnull"`
+	Active    bool      `pg:"active,notnull,default:true"`
+	Settings  Settings  `pg:"settings,type:jsonb"`
+	CreatedAt time.Time `pg:"created_at,notnull,default:now()"`
+	UpdatedAt time.Time `pg:"updated_at,notnull,default:now()"`
 }
 
 // BeforeInsert hook is called before inserting a new tenant
@@ -49,4 +49,4 @@ func (t *Tenant) BeforeUpdate(ctx orm.DB) error {
 // TableName returns the name of the table for this model
 func (t *Tenant) TableName() string {
 	return "tenants"
-} 
+}

@@ -73,6 +73,10 @@ func (db *DB) CreateSchema() error {
 		(*models.TeamMember)(nil),
 		(*models.User)(nil),
 		(*models.AuditLog)(nil),
+		// Add new authorization models
+		(*models.Permission)(nil),
+		(*models.RolePermission)(nil),
+		(*models.ResourceScope)(nil),
 	}
 
 	for _, model := range models {

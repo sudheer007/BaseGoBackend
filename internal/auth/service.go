@@ -21,6 +21,11 @@ var (
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
 	ErrMaxLoginAttempts   = errors.New("maximum login attempts exceeded")
+	ErrEmailAlreadyExists = errors.New("email already exists")
+	ErrInvalidEmail       = errors.New("invalid email format")
+	ErrInvalidPassword    = errors.New("password must be at least 8 characters")
+	ErrTenantNotFound     = errors.New("tenant not found")
+	ErrOrganizationNotFound = errors.New("organization not found")
 )
 
 // Claims represents the JWT claims for authentication
@@ -55,6 +60,17 @@ type TokenResponse struct {
 	UserID       string `json:"user_id"`
 	TenantID     string `json:"tenant_id"`
 	RequiresMFA  bool   `json:"requires_mfa,omitempty"`
+}
+
+// SignupRequest represents the data needed for user registration
+type SignupRequest struct {
+	Email           string    `json:"email" binding:"required,email"`
+	Password        string    `json:"password" binding:"required,min=8"`
+	FirstName       string    `json:"first_name"`
+	LastName        string    `json:"last_name"`
+	OrganizationID  uuid.UUID `json:"organization_id,omitempty"`
+	TenantID        uuid.UUID `json:"tenant_id,omitempty"`
+	Role            string    `json:"role,omitempty"` // Optional, defaults to RoleUser
 }
 
 // Service provides authentication functionality
@@ -374,6 +390,195 @@ func (s *Service) Logout(ctx context.Context, userID uuid.UUID, ipAddress, userA
 	
 	// Note: In a real implementation, you would add the token to a blacklist
 	// or revoke specific tokens. For simplicity, we're just logging the action.
+	
+	return nil
+}
+
+// Signup registers a new user and returns authentication tokens
+func (s *Service) Signup(ctx context.Context, req SignupRequest, ipAddress, userAgent string) (*TokenResponse, error) {
+	// Start a transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+	
+	// Validate email format
+	if req.Email == "" {
+		return nil, ErrInvalidEmail
+	}
+	
+	// Validate password strength
+	if len(req.Password) < 8 {
+		return nil, ErrInvalidPassword
+	}
+	
+	// Check if email already exists
+	exists, err := tx.Model((*models.User)(nil)).
+		Where("email = ?", req.Email).
+		Exists()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check email existence: %w", err)
+	}
+	if exists {
+		return nil, ErrEmailAlreadyExists
+	}
+	
+	// Set default role if not provided
+	role := models.Role(req.Role)
+	if role == "" {
+		role = models.RoleUser
+	}
+	
+	// Create new user
+	user := &models.User{
+		Email:         req.Email,
+		Password:      req.Password, // Will be hashed by BeforeInsert hook
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		Role:          role,
+		Status:        models.UserStatusActive,
+		Active:        true,
+		TenantID:      req.TenantID,
+		OrganizationID: req.OrganizationID,
+	}
+	
+	// Validate tenant if provided
+	if user.TenantID != uuid.Nil {
+		tenant := new(models.Tenant)
+		err := tx.Model(tenant).Where("id = ?", user.TenantID).Select()
+		if err != nil {
+			if errors.Is(err, pg.ErrNoRows) {
+				return nil, ErrTenantNotFound
+			}
+			return nil, fmt.Errorf("failed to check tenant: %w", err)
+		}
+	} else {
+		// Use default tenant
+		tenant := new(models.Tenant)
+		err := tx.Model(tenant).Where("name = ?", "default").Select()
+		if err != nil {
+			if errors.Is(err, pg.ErrNoRows) {
+				// Create default tenant if it doesn't exist
+				tenant = &models.Tenant{
+					ID:       uuid.New(),
+					Name:     "default",
+					Domain:   "default.example.com",
+					Active:   true,
+					Settings: models.Settings{},
+				}
+				_, err = tx.Model(tenant).Insert()
+				if err != nil {
+					return nil, fmt.Errorf("failed to create default tenant: %w", err)
+				}
+			} else {
+				return nil, fmt.Errorf("failed to check default tenant: %w", err)
+			}
+		}
+		user.TenantID = tenant.ID
+	}
+	
+	// Validate organization if provided
+	if user.OrganizationID != uuid.Nil {
+		org := new(models.Organization)
+		err := tx.Model(org).Where("id = ?", user.OrganizationID).Select()
+		if err != nil {
+			if errors.Is(err, pg.ErrNoRows) {
+				return nil, ErrOrganizationNotFound
+			}
+			return nil, fmt.Errorf("failed to check organization: %w", err)
+		}
+	}
+	
+	// Insert user
+	_, err = tx.Model(user).Insert()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+	
+	// Generate tokens
+	accessTokenExp := time.Now().Add(s.config.JWT.ExpiryDuration)
+	refreshTokenExp := time.Now().Add(s.config.JWT.RefreshExpiry)
+	
+	tokenID := uuid.New().String()
+	
+	// Create access token
+	accessToken, err := s.generateAccessToken(user, accessTokenExp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+	
+	// Create refresh token
+	refreshToken, err := s.generateRefreshToken(user.ID.String(), tokenID, refreshTokenExp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+	
+	// Log user creation
+	s.auditSvc.LogAction(ctx, user.TenantID, user.ID, models.AuditActionCreate, 
+		"user", user.ID.String(), "User created through signup", 
+		ipAddress, userAgent)
+	
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	
+	// Return the token response
+	return &TokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresAt:    accessTokenExp.Unix(),
+		TokenType:    "Bearer",
+		UserID:       user.ID.String(),
+		TenantID:     user.TenantID.String(),
+	}, nil
+}
+
+// UpdateUserRole updates a user's role
+func (s *Service) UpdateUserRole(ctx context.Context, userID uuid.UUID, role models.Role, updaterID uuid.UUID, ipAddress, userAgent string) error {
+	// Validate role
+	validRoles := []models.Role{models.RoleSuperAdmin, models.RoleAdmin, models.RoleManager, models.RoleUser, models.RoleReadOnly}
+	isValidRole := false
+	for _, r := range validRoles {
+		if role == r {
+			isValidRole = true
+			break
+		}
+	}
+	
+	if !isValidRole {
+		return fmt.Errorf("invalid role: %s", role)
+	}
+	
+	// Get user to update
+	user := new(models.User)
+	err := s.db.Model(user).Where("id = ?", userID).Select()
+	if err != nil {
+		if errors.Is(err, pg.ErrNoRows) {
+			return errors.New("user not found")
+		}
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+	
+	// Store old role for audit
+	oldRole := user.Role
+	
+	// Update user role
+	_, err = s.db.Model(user).
+		Set("role = ?", role).
+		Set("updated_at = ?", time.Now()).
+		Where("id = ?", userID).
+		Update()
+	
+	if err != nil {
+		return fmt.Errorf("failed to update user role: %w", err)
+	}
+	
+	// Log role change
+	s.auditSvc.LogAction(ctx, user.TenantID, updaterID, models.AuditActionUpdate, 
+		"user", userID.String(), fmt.Sprintf("User role changed from %s to %s", oldRole, role), 
+		ipAddress, userAgent)
 	
 	return nil
 } 
