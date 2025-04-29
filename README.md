@@ -65,42 +65,52 @@ While the foundation is strong, key areas require further implementation for a p
 
 *   Go 1.21+ (Verify based on `go.mod`)
 *   PostgreSQL 12+
-*   Make (optional, for running commands in Makefile if created)
+*   Make (optional, for easier command execution)
 
 ## Project Structure
 
 ```
-.
+.                 # Project Root
 ├── cmd/
-│   └── api/                 # API application entry point
-├── docs/                    # Documentation (DPIA, Config Guides, etc.)
-├── internal/                # Internal packages (business logic, data access, security)
-│   ├── api/                 # API handlers and routes (if separated)
-│   ├── auth/                # Authentication & Authorization logic (JWT, Casbin)
-│   ├── consent/             # User consent management
-│   ├── data/                # Data classification & retention
-│   ├── database/            # Database connection, repositories
-│   ├── middleware/          # HTTP middleware (Audit, CORS, RateLimit, Sanitize, Headers)
-│   ├── models/              # Data structures/entities
-│   ├── security/            # Core security services (Crypto, KMS, Logger, Monitor, Constants)
-│   └── ...                  # Other internal domains
-├── pkg/                     # Packages potentially reusable by external applications
-├── .env.example             # Example environment variables
-├── .gitignore               # Git ignore file
-├── go.mod                   # Go module definition
-├── go.sum                   # Go module checksums
-└── README.md                # This file
+│   └── api/      # API application entry point (main.go)
+├── docs/         # Documentation (DPIA, Config Guides, etc.)
+├── internal/     # Internal packages (business logic, data access, security)
+├── pkg/          # Packages potentially reusable by external applications
+├── .env          # Local environment variables (DO NOT COMMIT)
+├── .env.example  # Example environment variables (for reference)
+├── .gitignore    # Git ignore file
+├── go.mod        # Go module definition
+├── go.sum        # Go module checksums
+├── Makefile      # Build/Run/Test helper scripts
+└── README.md     # This file
 ```
+
+## Environment Configuration
+
+Configuration is managed via environment variables. For local development, you can create a `.env` file in the project root.
+
+1.  **Copy the example:**
+    ```bash
+    cp .env.example .env
+    ```
+2.  **Edit `.env`:** Update settings like database credentials, JWT secrets, etc. **Do not commit `.env` to version control.**
+
+**Key Environment Variable: `APP_ENV`**
+
+This variable controls the application's operating mode:
+
+*   `APP_ENV=local`: (Default) For local development. Enables debug logging and other development aids.
+*   `APP_ENV=development`: For staging or development servers.
+*   `APP_ENV=production`: For production servers. Disables debug mode, uses info-level logging.
+
+The application will automatically adjust `Debug` mode and `LogLevel` based on `APP_ENV`.
 
 ## Getting Started (Local Development)
 
 1.  **Clone the repository:**
     ```bash
-    # Using HTTPS
-    git clone https://github.com/sudheer007/BaseGoBackend.git
-    # Or using SSH
-    # git clone git@github.com:sudheer007/BaseGoBackend.git
-    cd BaseGoBackend
+    git clone <repository-url>
+    cd <repository-directory>
     ```
 
 2.  **Install Dependencies:**
@@ -108,48 +118,52 @@ While the foundation is strong, key areas require further implementation for a p
     go mod tidy
     ```
 
-3.  **Configuration:**
-    *   Copy the example environment file:
-        ```bash
-        cp .env.example .env
-        ```
-    *   Edit the `.env` file with your local settings:
-        *   Database credentials (`DB_...`).
-        *   JWT secrets/keys.
-        *   API port (`PORT`).
-        *   Encryption keys (defaults might work initially with `crypto.go`).
-        *   KMS settings (will use local mock by default).
+3.  **Setup Configuration:**
+    *   Copy `.env.example` to `.env`: `cp .env.example .env`
+    *   Ensure `APP_ENV=local` is set in `.env`.
+    *   Update database credentials (`DB_...`) and other secrets in `.env`.
 
 4.  **Database Setup:**
     *   Ensure PostgreSQL is running.
     *   Create the database specified in `.env`.
-    *   **Run Migrations:** *Determine the correct command or startup behavior for schema setup.* (e.g., `go run cmd/migrate/main.go` - **Needs confirmation**)
+    *   The application attempts to create the schema on startup (verify `db.CreateSchema()` in `main.go`).
 
 5.  **Run the API:**
-    ```bash
-    go run cmd/api/main.go
-    ```
-    Access via `http://localhost:PORT` (e.g., `http://localhost:8080`).
+    *   **Using `make` (Recommended):**
+        ```bash
+        make run
+        ```
+    *   **Using `go run`:**
+        ```bash
+        go run cmd/api/main.go
+        ```
 
-## Running on a Linux Server
+Access the API at `http://localhost:PORT` (e.g., `http://localhost:8080`) and Swagger docs at `http://localhost:PORT/swagger/index.html`.
+
+## Running on a Server (Production/Development Environment)
 
 1.  **Build the Binary:**
     ```bash
-    # Ensure target OS/Arch are correct
-    GOOS=linux GOARCH=amd64 go build -o gobackend_api cmd/api/main.go
+    # Ensure target OS/Arch are correct if cross-compiling
+    # GOOS=linux GOARCH=amd64 make build
+    make build
     ```
+    This creates an executable named `gobackend_api`.
 
-2.  **Transfer Binary & Config:**
+2.  **Deploy:**
     *   Copy the `gobackend_api` executable to your server (e.g., `/opt/gobackend/`).
-    *   Copy the configured `.env` file or set environment variables on the server.
 
-3.  **Database:**
-    *   Ensure DB is accessible.
-    *   Run migrations if necessary.
+3.  **Configure Environment Variables:**
+    *   **Crucially, set `APP_ENV=production` (or `development`)**. Never run with `APP_ENV=local` in production.
+    *   Set all other required environment variables (DB host/pass, JWT secret, Redis host, etc.) directly on the server. **Do not rely on a `.env` file in production.** Use your deployment mechanism (systemd EnvironmentFile, Docker env vars, Kubernetes Secrets/ConfigMaps, etc.).
 
-4.  **Run the Application (using systemd recommended):**
-    *   Create `/etc/systemd/system/gobackend.service` (see example in previous README version or below).
-    *   Configure `User`, `Group`, `WorkingDirectory`, `ExecStart`, and `EnvironmentFile` (if using).
+4.  **Database:**
+    *   Ensure the database is accessible from the server.
+    *   Ensure the schema is created/migrated (manual migration might be needed for production).
+
+5.  **Run the Application (using systemd recommended):**
+    *   Create a systemd service file (e.g., `/etc/systemd/system/gobackend.service`). Refer to the example in the previous README section or below.
+    *   Ensure the service file sets the correct `APP_ENV` and other environment variables.
     *   Enable & Start: `sudo systemctl enable gobackend && sudo systemctl start gobackend`
 
     *Example `systemd` service file (`/etc/systemd/system/gobackend.service`):*
@@ -163,9 +177,14 @@ While the foundation is strong, key areas require further implementation for a p
     User=gobackenduser      # Use a dedicated, non-root user
     Group=gobackendgroup
     WorkingDirectory=/opt/gobackend
-    # If using .env file in WorkingDirectory, ensure app loads it.
-    # Alternatively, use EnvironmentFile:
-    # EnvironmentFile=/etc/gobackend/gobackend.conf
+    # --- Environment Variables --- #
+    Environment="APP_ENV=production"
+    Environment="DB_HOST=your_prod_db_host"
+    Environment="DB_PASS=your_prod_db_password"
+    Environment="JWT_SECRET=your_strong_prod_jwt_secret"
+    # ... add all other required environment variables ...
+    # Alternatively, use EnvironmentFile=/etc/gobackend/gobackend.conf
+    
     ExecStart=/opt/gobackend/gobackend_api
     Restart=on-failure
     RestartSec=5s
@@ -176,6 +195,16 @@ While the foundation is strong, key areas require further implementation for a p
     [Install]
     WantedBy=multi-user.target
     ```
+
+## Makefile Commands
+
+A `Makefile` is provided for convenience:
+
+*   `make run`: Run locally using `go run`.
+*   `make build`: Build the binary.
+*   `make test`: Run tests.
+*   `make clean`: Remove the built binary.
+*   `make help`: Show available commands.
 
 ## Security Considerations
 
@@ -204,3 +233,65 @@ Designed with GDPR, SOC 2 Type 2, ISO 27001 considerations. Ensure configuration
 *(Keep existing or update contribution guidelines)*
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Third-Party Services Integration
+
+This project includes integration with several third-party services for enhanced functionality.
+
+### OpenRouter Integration
+
+The OpenRouter API integration allows you to leverage powerful AI models for chat completions and other AI-related tasks.
+
+#### Configuration
+
+To configure OpenRouter, add the following environment variables:
+
+```env
+# OpenRouter configuration
+OPENROUTER_ENABLED=true
+OPENROUTER_API_KEY=your-openrouter-api-key-here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_TIMEOUT_SECONDS=30
+OPENROUTER_RETRY_ATTEMPTS=3
+OPENROUTER_RETRY_WAIT_SECONDS=1
+```
+
+#### API Usage
+
+Once configured, the OpenRouter API is available through the following endpoint:
+
+```
+POST /api/v1/ai/chat-completion
+```
+
+Request payload:
+
+```json
+{
+  "model": "openai/gpt-3.5-turbo",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "Hello, who are you?"
+    }
+  ],
+  "temperature": 0.7,
+  "max_tokens": 150
+}
+```
+
+Response:
+
+```json
+{
+  "id": "response-id",
+  "model": "openai/gpt-3.5-turbo",
+  "content": "I am an AI assistant designed to help answer questions and provide information. How can I assist you today?"
+}
+```
+
+For a full list of available models, refer to the [OpenRouter API documentation](https://openrouter.ai/docs).

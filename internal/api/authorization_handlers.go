@@ -175,6 +175,35 @@ func (h *AuthorizationHandlers) RemovePermissionFromRole(c *gin.Context) {
 	})
 }
 
+// --- Stubs for missing Role methods ---
+
+// GetRoles is a stub
+func (h *AuthorizationHandlers) GetRoles(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not Implemented"})
+}
+
+// CreateRole is a stub
+func (h *AuthorizationHandlers) CreateRole(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not Implemented"})
+}
+
+// UpdateRole is a stub
+func (h *AuthorizationHandlers) UpdateRole(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not Implemented"})
+}
+
+// DeleteRole is a stub
+func (h *AuthorizationHandlers) DeleteRole(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not Implemented"})
+}
+
+// UpdatePermissions is a stub - Assuming this might be meant for batch updates?
+func (h *AuthorizationHandlers) UpdatePermissions(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Not Implemented"})
+}
+
+// --- End Stubs ---
+
 // ResourceScopeRequest represents a request to create or update a resource scope
 type ResourceScopeRequest struct {
 	UserID       uuid.UUID          `json:"userId" binding:"required"`

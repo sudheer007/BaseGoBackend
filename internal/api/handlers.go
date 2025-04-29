@@ -79,7 +79,7 @@ func (r *Router) Login(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	// Attempt login
-	resp, err := r.AuthService.Login(c.Request.Context(), req, ipAddress, userAgent)
+	resp, err := r.authService.Login(c.Request.Context(), req, ipAddress, userAgent)
 	if err != nil {
 		status := http.StatusInternalServerError
 
@@ -123,7 +123,7 @@ func (r *Router) RefreshToken(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	// Attempt to refresh token
-	resp, err := r.AuthService.Refresh(c.Request.Context(), req.RefreshToken, ipAddress, userAgent)
+	resp, err := r.authService.Refresh(c.Request.Context(), req.RefreshToken, ipAddress, userAgent)
 	if err != nil {
 		status := http.StatusInternalServerError
 
@@ -155,7 +155,7 @@ func (r *Router) Logout(c *gin.Context) {
 	}
 
 	// Validate the refresh token to get user ID
-	token, err := r.AuthService.ValidateToken(req.RefreshToken)
+	token, err := r.authService.ValidateToken(req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, ResponseError{
 			Error: "Invalid token",
@@ -177,7 +177,7 @@ func (r *Router) Logout(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	// Perform logout
-	if err := r.AuthService.Logout(c.Request.Context(), userID, ipAddress, userAgent); err != nil {
+	if err := r.authService.Logout(c.Request.Context(), userID, ipAddress, userAgent); err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseError{
 			Error: "Logout failed: " + err.Error(),
 		})
@@ -280,7 +280,7 @@ func (r *Router) Signup(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	// Attempt signup
-	resp, err := r.AuthService.Signup(c.Request.Context(), req, ipAddress, userAgent)
+	resp, err := r.authService.Signup(c.Request.Context(), req, ipAddress, userAgent)
 	if err != nil {
 		status := http.StatusInternalServerError
 
@@ -351,7 +351,7 @@ func (r *Router) UpdateUserRole(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	// Update the role
-	err = r.AuthService.UpdateUserRole(
+	err = r.authService.UpdateUserRole(
 		c.Request.Context(),
 		userID,
 		models.Role(req.Role),

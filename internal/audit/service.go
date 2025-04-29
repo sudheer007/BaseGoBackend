@@ -208,4 +208,34 @@ func (s *Service) GetLogs(
 	}
 
 	return logs, count, nil
+}
+
+// LogEvent records a generic event with custom metadata
+func (s *Service) LogEvent(ctx context.Context, eventType string, metadata map[string]interface{}) error {
+	// Extract user info from context if available
+	var userID uuid.UUID
+	var tenantID uuid.UUID
+	
+	// Use uuid.Nil for system events if user info is not available
+	
+	log := &models.AuditLog{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		UserID:       userID,
+		Action:       models.AuditActionCustom,
+		ResourceType: "event",
+		ResourceID:   eventType,
+		Description:  fmt.Sprintf("Event: %s", eventType),
+		Succeeded:    true,
+		CreatedAt:    time.Now(),
+	}
+	
+	// Set metadata as new value
+	if metadata != nil {
+		if err := log.SetNewValue(metadata); err != nil {
+			return err
+		}
+	}
+	
+	return s.Log(ctx, log)
 } 

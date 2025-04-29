@@ -53,7 +53,7 @@ func (c *Client) GetPlan(planID string) (map[string]interface{}, error) {
 		return nil, errors.New("plan ID is required")
 	}
 
-	return c.rzp.Plan.Fetch(planID, nil)
+	return c.rzp.Plan.Fetch(planID, map[string]interface{}{}, map[string]string{})
 }
 
 // ListPlans retrieves all plans

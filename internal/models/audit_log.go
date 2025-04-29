@@ -20,6 +20,7 @@ const (
 	AuditActionLogin  AuditAction = "login"
 	AuditActionLogout AuditAction = "logout"
 	AuditActionFailed AuditAction = "failed"
+	AuditActionCustom AuditAction = "custom"
 )
 
 // AuditLog represents an audit trail entry in the system

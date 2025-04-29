@@ -618,8 +618,6 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "A secure Go backend API with Swagger.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-	LeftDelim:        "{{",
-	RightDelim:       "}}",
 }
 
 func init() {

@@ -1,83 +1,128 @@
 package api
 
 import (
-	"log"
-	"strconv"
+	"fmt"
+	"strings"
 
 	"gobackend/internal/auth"
 	"gobackend/internal/config"
 	"gobackend/internal/data"
 	"gobackend/internal/middleware"
 	"gobackend/internal/models"
+	"gobackend/internal/observability"
 	"gobackend/internal/security"
 	"gobackend/internal/services"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-pg/pg/v10"
+	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// Router is the main API router
+// Router wraps the Gin engine and holds dependencies
 type Router struct {
 	Engine        *gin.Engine
-	Config        *config.Config
-	AuthService   *auth.Service
-	EncryptionSvc *security.EncryptionService
-	DB            *pg.DB
+	cfg           *config.Config
+	db            *pg.DB
+	redisClient   *redis.Client
+	authService   *auth.Service
+	encryptionSvc *security.EncryptionService
+	logger        *observability.Logger
 }
 
-// NewRouter creates a new API router
-func NewRouter(cfg *config.Config, authSvc *auth.Service, encryptionSvc *security.EncryptionService, db *pg.DB) *Router {
-	// Set Gin mode based on environment
-	if cfg.App.Env == "production" {
+// NewRouter creates a new router with dependencies
+func NewRouter(cfg *config.Config, logger *observability.Logger, authSvc *auth.Service, encryptionSvc *security.EncryptionService, db *pg.DB, redisClient *redis.Client) *Router {
+	// Set Gin mode based on config
+	if cfg.App.Debug {
+		gin.SetMode(gin.DebugMode)
+	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	r := &Router{
-		Engine:        gin.New(),
-		Config:        cfg,
-		AuthService:   authSvc,
-		EncryptionSvc: encryptionSvc,
-		DB:            db,
+	r := gin.New()
+
+	router := &Router{
+		Engine:        r,
+		cfg:           cfg,
+		db:            db,
+		redisClient:   redisClient,
+		authService:   authSvc,
+		encryptionSvc: encryptionSvc,
+		logger:        logger,
 	}
 
-	// Set up middleware
-	r.setupMiddleware()
+	// Setup middleware first
+	router.setupMiddleware()
 
-	// Set up routes
-	r.setupRoutes()
+	// Then setup routes
+	router.setupRoutes()
 
-	// Set up Swagger
-	SetupSwagger(r.Engine)
-
-	return r
+	return router
 }
+
+// Run starts the HTTP server
+func (r *Router) Run() error {
+	addr := fmt.Sprintf(":%d", r.cfg.App.Port)
+	r.logger.Info("Starting server", observability.Field{Key: "address", Value: addr}.ToZapField())
+	return r.Engine.Run(addr)
+}
+
+// UseMiddleware adds middleware to the router (potentially redundant if setupMiddleware handles all)
+// func (r *Router) UseMiddleware(middleware ...gin.HandlerFunc) {
+// 	r.Engine.Use(middleware...)
+// }
 
 // setupMiddleware configures middleware for the router
 func (r *Router) setupMiddleware() {
-	// Recovery middleware
-	r.Engine.Use(middleware.Recovery())
+	// Recovery middleware first
+	r.Engine.Use(gin.Recovery())
 
-	// Request logging
-	r.Engine.Use(middleware.RequestLogger())
+	// Request ID middleware
+	r.Engine.Use(RequestIDMiddleware())
+
+	// Custom logging middleware
+	r.Engine.Use(RequestLogger(r.logger))
 
 	// Security headers
 	r.Engine.Use(middleware.SecurityHeaders())
 
 	// CORS
-	r.Engine.Use(middleware.CORS(r.Config.CORS.AllowedOrigins))
+	if r.cfg.CORS.AllowedOrigins != "" {
+		corsConfig := cors.Config{
+			AllowOrigins:     strings.Split(r.cfg.CORS.AllowedOrigins, ","),
+			AllowMethods:     strings.Split(r.cfg.CORS.AllowedMethods, ","),
+			AllowHeaders:     strings.Split(r.cfg.CORS.AllowedHeaders, ","),
+			ExposeHeaders:    strings.Split(r.cfg.CORS.ExposedHeaders, ","),
+			AllowCredentials: r.cfg.CORS.AllowCredentials,
+			MaxAge:           r.cfg.CORS.MaxAge,
+		}
+		r.Engine.Use(cors.New(corsConfig))
+	}
 
 	// Rate limiting
-	rateLimiter := middleware.NewRateLimit()
-	r.Engine.Use(rateLimiter.Limit(
-		float64(r.Config.RateLimit.Requests)/r.Config.RateLimit.Duration.Seconds(),
-		r.Config.RateLimit.Requests,
-	))
+	if r.cfg.RateLimit.Enabled && r.redisClient != nil {
+		rateLimiterConfig := &middleware.RateLimiterConfig{
+			RPS:         r.cfg.RateLimit.RequestsPerSecond,
+			Burst:       r.cfg.RateLimit.Burst,
+			ExpireIn:    r.cfg.RateLimit.ExpireMinutes,
+			RedisClient: r.redisClient,
+		}
+		rateLimiter := middleware.NewRateLimiterMiddleware(rateLimiterConfig)
+		r.Engine.Use(rateLimiter.Limit())
+	} else if r.cfg.RateLimit.Enabled {
+		r.logger.Warn("Rate limiting enabled in config but Redis client is not available")
+	}
 
 	// Field-level encryption
-	if r.EncryptionSvc != nil {
-		r.Engine.Use(middleware.NewEncryptionMiddleware(r.EncryptionSvc))
+	if r.encryptionSvc != nil {
+		r.Engine.Use(middleware.NewEncryptionMiddleware(r.encryptionSvc))
 	}
+
+	// Error Handling Middleware (add this last)
+	r.Engine.Use(ErrorHandler(r.logger))
 }
 
 // setupRoutes configures the API routes
@@ -86,65 +131,54 @@ func (r *Router) setupRoutes() {
 	r.Engine.GET("/health", r.HealthCheck)
 
 	// Metrics endpoint
-	r.Engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	if r.cfg.Metrics.Enabled {
+		r.Engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	}
+
+	// Swagger Docs
+	swaggerURL := ginSwagger.URL("/swagger/doc.json")
+	r.Engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, swaggerURL))
 
 	// API v1 routes
 	v1 := r.Engine.Group("/api/v1")
 	{
 		// Public routes (no authentication required)
-		auth := v1.Group("/auth")
+		authGroup := v1.Group("/auth")
 		{
-			auth.POST("/login", r.Login)
-			auth.POST("/signup", r.Signup)
-			auth.POST("/refresh", r.RefreshToken)
-			auth.POST("/logout", r.Logout)
+			authGroup.POST("/login", r.Login)
+			authGroup.POST("/signup", r.Signup)
+			authGroup.POST("/refresh", r.RefreshToken)
+			authGroup.POST("/logout", r.Logout)
 		}
 
-		// Create services and repositories
-		orgRepo := data.NewOrganizationRepository(r.DB)
-		orgService := services.NewOrganizationService(orgRepo, r.DB)
+		// Initialize services and handlers within the route setup
+		orgRepo := data.NewOrganizationRepository(r.db)
+		orgService := services.NewOrganizationService(orgRepo, r.db)
 		orgHandlers := NewOrganizationHandlers(orgService)
 
-		// Create team service and handlers
-		teamService := services.NewTeamService(r.DB)
+		teamService := services.NewTeamService(r.db)
 		teamHandlers := NewTeamHandlers(teamService)
 
-		// Create authorization service and handlers
-		authzService := services.NewAuthorizationService(r.DB)
+		authzService := services.NewAuthorizationService(r.db)
 		authzHandlers := NewAuthorizationHandlers(authzService)
 
-		// Initialize the authorization middleware
-		authMiddleware := middleware.NewAuthMiddleware(r.AuthService)
+		authMiddleware := middleware.NewAuthMiddleware(r.authService)
 		authzMiddleware := middleware.NewAuthorizationMiddleware(authzService)
 
-		// Seed default permissions
+		// Seed default permissions (consider doing this elsewhere, like main.go)
 		if err := authzService.SeedDefaultPermissions(); err != nil {
-			// Log the error but continue
-			log.Printf("Failed to seed default permissions: %v", err)
+			r.logger.Error("Failed to seed default permissions", err)
 		}
 
-		// Organizations routes (now with proper authorization)
+		// Organizations routes
 		orgs := v1.Group("/organizations")
 		{
-			// Apply authentication middleware
 			orgs.Use(authMiddleware.Authenticate())
-
-			// List organizations (requires permission to list organizations)
 			orgs.GET("", authzMiddleware.RequirePermission("organization", "list"), orgHandlers.ListOrganizations)
-
-			// List organizations for current user
 			orgs.GET("/my", orgHandlers.ListMyOrganizations)
-
-			// Get single organization (requires resource access)
 			orgs.GET("/:id", authzMiddleware.RequireOrganizationAccess(models.AccessLevelReadOnly), orgHandlers.GetOrganization)
-
-			// Create organization (requires super admin role)
 			orgs.POST("", authzMiddleware.RequirePermission("organization", "create"), orgHandlers.CreateOrganization)
-
-			// Update organization (requires admin level access to the organization)
 			orgs.PUT("/:id", authzMiddleware.RequireOrganizationAccess(models.AccessLevelAdmin), orgHandlers.UpdateOrganization)
-
-			// Delete organization (requires owner level access)
 			orgs.DELETE("/:id", authzMiddleware.RequireOrganizationAccess(models.AccessLevelOwner), orgHandlers.DeleteOrganization)
 		}
 
@@ -162,22 +196,16 @@ func (r *Router) setupRoutes() {
 				users.PUT("/:id/mfa", authzMiddleware.RequireUserAccess(models.AccessLevelModify), r.ConfigureMFA)
 				users.PUT("/:id/role", authzMiddleware.RequirePermission("user", "update"), r.UpdateUserRole)
 
-				// New routes for super admin organization management
 				userOrgs := users.Group("/:userId/managed-organizations")
 				userOrgs.Use(authzMiddleware.RequirePermission("organization", "list"))
 				{
-					// List organizations managed by a user
 					userOrgs.GET("", orgHandlers.ListUserManagedOrganizations)
-
-					// Assign organization to user (requires superadmin permission)
 					userOrgs.POST("", authzMiddleware.RequirePermission("organization", "create"), orgHandlers.AssignOrganizationToUser)
-
-					// Unassign organization from user
 					userOrgs.DELETE("/:organizationId", authzMiddleware.RequirePermission("organization", "delete"), orgHandlers.UnassignOrganizationFromUser)
 				}
 			}
 
-			// Team routes with team handlers
+			// Team routes
 			teams := authenticated.Group("/teams")
 			{
 				teams.GET("", authzMiddleware.RequirePermission("team", "list"), teamHandlers.ListTeams)
@@ -186,69 +214,34 @@ func (r *Router) setupRoutes() {
 				teams.PUT("/:id", authzMiddleware.RequireTeamAccess(models.AccessLevelModify), teamHandlers.UpdateTeam)
 				teams.DELETE("/:id", authzMiddleware.RequireTeamAccess(models.AccessLevelAdmin), teamHandlers.DeleteTeam)
 
-				// Team members management
 				teams.GET("/:id/members", authzMiddleware.RequireTeamAccess(models.AccessLevelReadOnly), teamHandlers.ListTeamMembers)
 				teams.POST("/:id/members", authzMiddleware.RequireTeamAccess(models.AccessLevelManage), teamHandlers.AddTeamMember)
 				teams.DELETE("/:id/members/:userId", authzMiddleware.RequireTeamAccess(models.AccessLevelManage), teamHandlers.RemoveTeamMember)
 			}
 
-			// Tenant routes
-			tenants := authenticated.Group("/tenants")
-			{
-				tenants.GET("", authzMiddleware.RequirePermission("organization", "list"), r.ListTenants)
-				tenants.GET("/:id", authMiddleware.RequireTenantAccess(), r.GetTenant)
-				tenants.PUT("/:id", authzMiddleware.RequirePermission("organization", "update"), r.UpdateTenant)
-			}
-
 			// Audit log routes
 			audits := authenticated.Group("/audit-logs")
+			audits.Use(authzMiddleware.RequirePermission("audit", "read"))
 			{
-				audits.GET("", authzMiddleware.RequirePermission("organization", "read"), r.ListAuditLogs)
+				audits.GET("", r.ListAuditLogs)
 			}
 
 			// Authorization routes (only accessible to super admins)
 			permissions := authenticated.Group("/permissions")
-			permissions.Use(authzMiddleware.RequirePermission("permission", "list"))
+			permissions.Use(authzMiddleware.RequirePermission("permission", "manage"))
 			{
 				permissions.GET("", authzHandlers.GetPermissions)
+				permissions.PUT("", authzHandlers.UpdatePermissions)
 			}
 
-			// Role permissions routes
 			roles := authenticated.Group("/roles")
+			roles.Use(authzMiddleware.RequirePermission("role", "manage"))
 			{
-				// Get role permissions (requires permission to list permissions)
-				roles.GET("/:role/permissions", authzMiddleware.RequirePermission("permission", "list"),
-					authzHandlers.GetRolePermissions)
-
-				// Assign permission to role (requires permission to assign permissions)
-				roles.POST("/:role/permissions", authzMiddleware.RequirePermission("permission", "assign"),
-					authzHandlers.AssignPermissionToRole)
-
-				// Remove permission from role (requires permission to revoke permissions)
-				roles.DELETE("/:role/permissions/:permissionId", authzMiddleware.RequirePermission("permission", "revoke"),
-					authzHandlers.RemovePermissionFromRole)
-			}
-
-			// Resource scopes routes
-			scopes := authenticated.Group("/resource-scopes")
-			{
-				// Create resource scope (requires super admin or admin role)
-				scopes.POST("", authzMiddleware.RequirePermission("permission", "assign"),
-					authzHandlers.CreateResourceScope)
-
-				// Update resource scope (requires super admin or admin role)
-				scopes.PUT("/:id", authzMiddleware.RequirePermission("permission", "assign"),
-					authzHandlers.UpdateResourceScope)
-
-				// Delete resource scope (requires super admin or admin role)
-				scopes.DELETE("/:id", authzMiddleware.RequirePermission("permission", "revoke"),
-					authzHandlers.DeleteResourceScope)
+				roles.GET("", authzHandlers.GetRoles)
+				roles.POST("", authzHandlers.CreateRole)
+				roles.PUT("/:roleName", authzHandlers.UpdateRole)
+				roles.DELETE("/:roleName", authzHandlers.DeleteRole)
 			}
 		}
 	}
-}
-
-// Run starts the API server
-func (r *Router) Run() error {
-	return r.Engine.Run(":" + strconv.Itoa(r.Config.App.Port))
 }
