@@ -13,7 +13,8 @@ import (
 	"gobackend/internal/auth"
 	"gobackend/internal/config"
 	"gobackend/internal/database"
-	"gobackend/internal/security"
+	"gobackend/internal/middleware"
+	"gobackend/internal/services/thirdparty"
 
 	_ "github.com/swaggo/files"       // swagger files
 	_ "github.com/swaggo/gin-swagger" // swagger generator
@@ -54,7 +55,12 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Set up database connection
+	// Log the environment and debug status
+	log.Printf("Application starting in [%s] mode", cfg.App.Env)
+	log.Printf("Debug mode: %t", cfg.App.Debug)
+	log.Printf("Log level: %s", cfg.App.LogLevel)
+
+	// Initialize database
 	db, err := database.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -67,22 +73,31 @@ func main() {
 	}
 
 	// Initialize encryption service
-	var encryptionSvc *security.EncryptionService
-	if cfg.Security.FieldEncryption {
-		encryptionSvc, err = cfg.Security.BuildEncryptionService()
-		if err != nil {
-			log.Printf("Warning: Failed to initialize encryption service: %v", err)
-		} else {
-			log.Println("Field-level encryption enabled")
-		}
+	encryptionSvc, err := cfg.Security.BuildEncryptionService()
+	if err != nil {
+		log.Fatalf("Failed to initialize encryption service: %v", err)
 	}
 
 	// Initialize services
 	auditSvc := audit.NewService(db.DB)
+
+	// Initialize auth service
 	authSvc := auth.NewService(db.DB, cfg, auditSvc)
 
-	// Create and set up the router
+	// Initialize third-party services provider
+	thirdPartyProvider := thirdparty.New(&cfg.ThirdParty)
+	if err := thirdPartyProvider.Initialize(); err != nil {
+		log.Printf("Warning: Failed to initialize some third-party services: %v", err)
+	}
+
+	// Initialize auth middleware
+	authMiddleware := middleware.NewAuthMiddleware(authSvc)
+
+	// Initialize router
 	router := api.NewRouter(cfg, authSvc, encryptionSvc, db.DB)
+
+	// Register AI routes
+	api.RegisterAIRoutes(router.Engine, thirdPartyProvider, authMiddleware)
 
 	// Set up graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -95,8 +110,8 @@ func main() {
 	}()
 
 	// Start the server
-	fmt.Printf("Starting server on port %d...\n", cfg.App.Port)
-	fmt.Printf("Swagger documentation available at: http://localhost:%d/swagger/index.html\n", cfg.App.Port)
+	log.Printf("Starting server on port %d...", cfg.App.Port)
+	log.Printf("Swagger documentation available at: http://localhost:%d/swagger/index.html", cfg.App.Port)
 	if err := router.Run(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
