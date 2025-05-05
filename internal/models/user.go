@@ -54,6 +54,10 @@ type User struct {
 	UpdatedAt       time.Time  `pg:"updated_at,notnull,default:now()"`
 	DeletedAt       *time.Time `pg:"deleted_at"`
 
+	// OAuth provider fields
+	GoogleID        string     `pg:"google_id"`
+	OAuthProvider   string     `pg:"oauth_provider"` // google, github, etc.
+
 	// OrgSuperAdmin flag allows a user to manage multiple organizations
 	// This is separate from Role to allow for more fine-grained control
 	OrgSuperAdmin bool `pg:"org_super_admin,notnull,default:false"`

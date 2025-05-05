@@ -22,22 +22,25 @@ const (
 
 // Config holds all configuration for the application
 type Config struct {
-	App         AppConfig
-	Database    DatabaseConfig
-	Redis       RedisConfig
-	JWT         JWTConfig
-	Security    SecurityConfig
-	RateLimit   RateLimitConfig
-	CORS        CORSConfig
-	Audit       AuditConfig
-	ThirdParty  ThirdPartyConfig
-	Jobs        JobsConfig
-	Metrics     *observability.Config
-	Logging     *observability.LoggingConfig
-	Payment     PaymentConfig
-	Environment string `env:"ENVIRONMENT" envDefault:"development"`
-	Debug       bool   `env:"DEBUG" envDefault:"true"`
-	LogLevel    string `env:"LOG_LEVEL" envDefault:"debug"`
+	App          AppConfig
+	Database     DatabaseConfig
+	Redis        RedisConfig
+	JWT          JWTConfig
+	Security     SecurityConfig
+	RateLimit    RateLimitConfig
+	CORS         CORSConfig
+	Audit        AuditConfig
+	ThirdParty   ThirdPartyConfig
+	Jobs         JobsConfig
+	Metrics      *observability.Config
+	Logging      *observability.LoggingConfig
+	Payment      PaymentConfig
+	OAuth        OAuthConfig
+	Multitenancy MultitenancyConfig
+	Storage      StorageConfig
+	Environment  string `env:"ENVIRONMENT" envDefault:"development"`
+	Debug        bool   `env:"DEBUG" envDefault:"true"`
+	LogLevel     string `env:"LOG_LEVEL" envDefault:"debug"`
 
 	Server struct {
 		Port int `env:"PORT" envDefault:"8080"`
@@ -136,6 +139,41 @@ type RazorpayConfig struct {
 	WebhookSecret string
 	Currency      string
 	Enabled       bool
+}
+
+// OAuthConfig holds OAuth provider configurations
+type OAuthConfig struct {
+	Google GoogleOAuthConfig
+}
+
+// GoogleOAuthConfig holds Google OAuth configuration
+type GoogleOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	Enabled      bool
+}
+
+// MultitenancyConfig holds multitenancy settings
+type MultitenancyConfig struct {
+	Enabled         bool
+	DefaultTenantID string
+	FeatureFlags    map[string]bool
+}
+
+// StorageConfig holds all storage-related configuration
+type StorageConfig struct {
+	Spaces SpacesConfig
+}
+
+// SpacesConfig holds DigitalOcean Spaces configuration
+type SpacesConfig struct {
+	AccessKey string `env:"SPACES_ACCESS_KEY" envDefault:""`
+	SecretKey string `env:"SPACES_SECRET_KEY" envDefault:""`
+	Endpoint  string `env:"SPACES_ENDPOINT" envDefault:"nyc3.digitaloceanspaces.com"`
+	Region    string `env:"SPACES_REGION" envDefault:"nyc3"`
+	Bucket    string `env:"SPACES_BUCKET" envDefault:""`
+	CDNURL    string `env:"SPACES_CDN_URL" envDefault:""`
 }
 
 // Load loads configuration from environment variables
@@ -242,6 +280,29 @@ func Load() (*Config, error) {
 				Enabled:       getEnvAsBool("RAZORPAY_ENABLED", false),
 			},
 		},
+		OAuth: OAuthConfig{
+			Google: GoogleOAuthConfig{
+				ClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+				ClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+				RedirectURL:  getEnv("GOOGLE_REDIRECT_URL", ""),
+				Enabled:      getEnvAsBool("GOOGLE_ENABLED", false),
+			},
+		},
+		Multitenancy: MultitenancyConfig{
+			Enabled:         getEnvAsBool("MULTITENANCY_ENABLED", false),
+			DefaultTenantID: getEnv("MULTITENANCY_DEFAULT_TENANT_ID", ""),
+			FeatureFlags:    getEnvAsBoolMap("MULTITENANCY_FEATURE_FLAGS", map[string]bool{}),
+		},
+		Storage: StorageConfig{
+			Spaces: SpacesConfig{
+				AccessKey: getEnv("SPACES_ACCESS_KEY", ""),
+				SecretKey: getEnv("SPACES_SECRET_KEY", ""),
+				Endpoint:  getEnv("SPACES_ENDPOINT", "nyc3.digitaloceanspaces.com"),
+				Region:    getEnv("SPACES_REGION", "nyc3"),
+				Bucket:    getEnv("SPACES_BUCKET", ""),
+				CDNURL:    getEnv("SPACES_CDN_URL", ""),
+			},
+		},
 		Environment: getEnv("ENVIRONMENT", EnvDevelopment),
 		Debug:       getEnvAsBool("DEBUG", true),
 		LogLevel:    getEnv("LOG_LEVEL", "debug"),
@@ -289,6 +350,14 @@ func getEnvAsFloat64(key string, defaultValue float64) float64 {
 	valueStr := getEnv(key, "")
 	if value, err := strconv.ParseFloat(valueStr, 64); err == nil {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsBoolMap(key string, defaultValue map[string]bool) map[string]bool {
+	valueStr := getEnv(key, "")
+	if value, err := strconv.ParseBool(valueStr); err == nil {
+		return map[string]bool{key: value}
 	}
 	return defaultValue
 }

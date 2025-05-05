@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gobackend/internal/audit"
 	"gobackend/internal/auth"
 	"gobackend/internal/config"
 	"gobackend/internal/data"
@@ -31,6 +32,7 @@ type Router struct {
 	authService   *auth.Service
 	encryptionSvc *security.EncryptionService
 	logger        *observability.Logger
+	googleAuthSvc *auth.GoogleService
 }
 
 // NewRouter creates a new router with dependencies
@@ -44,6 +46,10 @@ func NewRouter(cfg *config.Config, logger *observability.Logger, authSvc *auth.S
 
 	r := gin.New()
 
+	// Initialize Google Auth service
+	auditSvc := audit.NewService(db)
+	googleAuthSvc := auth.NewGoogleService(db, cfg, auditSvc, authSvc)
+
 	router := &Router{
 		Engine:        r,
 		cfg:           cfg,
@@ -52,6 +58,7 @@ func NewRouter(cfg *config.Config, logger *observability.Logger, authSvc *auth.S
 		authService:   authSvc,
 		encryptionSvc: encryptionSvc,
 		logger:        logger,
+		googleAuthSvc: googleAuthSvc,
 	}
 
 	// Setup middleware first
@@ -146,21 +153,61 @@ func (r *Router) setupRoutes() {
 		authGroup := v1.Group("/auth")
 		{
 			authGroup.POST("/login", r.Login)
-			authGroup.POST("/signup", r.Signup)
 			authGroup.POST("/refresh", r.RefreshToken)
 			authGroup.POST("/logout", r.Logout)
+
+			// Google Auth endpoints
+			googleAuthGroup := authGroup.Group("/google")
+			{
+				googleAuthGroup.POST("/login", r.GoogleLogin)
+
+				// These routes require authentication
+				googleAuthAuthenticatedGroup := googleAuthGroup.Group("")
+				googleAuthAuthenticatedGroup.Use(middleware.NewAuthMiddleware(r.authService).Authenticate())
+				{
+					googleAuthAuthenticatedGroup.POST("/logout", r.GoogleLogout)
+					googleAuthAuthenticatedGroup.GET("/user", r.GoogleUser)
+				}
+			}
 		}
 
-		// Initialize services and handlers within the route setup
+		// Initialize repositories
+		userRepo := data.NewUserRepository(r.db)
 		orgRepo := data.NewOrganizationRepository(r.db)
+
+		// Initialize services
+		auditSvc := audit.NewService(r.db)
+		userService := services.NewUserService(userRepo, auditSvc)
 		orgService := services.NewOrganizationService(orgRepo, r.db)
-		orgHandlers := NewOrganizationHandlers(orgService)
-
 		teamService := services.NewTeamService(r.db)
-		teamHandlers := NewTeamHandlers(teamService)
-
 		authzService := services.NewAuthorizationService(r.db)
+		recordingsService := services.NewRecordingsService()
+		meetingsService := services.NewMeetingsService()
+		userConfigService := services.NewUserConfigService(r.db)
+
+		// Initialize Spaces service
+		spacesConfig := services.SpacesConfig{
+			AccessKey: r.cfg.Storage.Spaces.AccessKey,
+			SecretKey: r.cfg.Storage.Spaces.SecretKey,
+			Endpoint:  r.cfg.Storage.Spaces.Endpoint,
+			Region:    r.cfg.Storage.Spaces.Region,
+			Bucket:    r.cfg.Storage.Spaces.Bucket,
+			CDNURL:    r.cfg.Storage.Spaces.CDNURL,
+		}
+		spacesService, err := services.NewSpacesService(spacesConfig)
+		if err != nil {
+			r.logger.Error("Failed to initialize Spaces service", err)
+		}
+
+		// Initialize handlers
+		userHandlers := NewUserHandlers(userService)
+		orgHandlers := NewOrganizationHandlers(orgService)
+		teamHandlers := NewTeamHandlers(teamService)
 		authzHandlers := NewAuthorizationHandlers(authzService)
+		recordingsHandlers := NewRecordingsHandlers(recordingsService)
+		meetingsHandlers := NewMeetingsHandlers(meetingsService)
+		userConfigHandlers := NewUserConfigHandlers(userConfigService)
+		spacesHandlers := NewSpacesHandlers(spacesService)
 
 		authMiddleware := middleware.NewAuthMiddleware(r.authService)
 		authzMiddleware := middleware.NewAuthorizationMiddleware(authzService)
@@ -169,6 +216,9 @@ func (r *Router) setupRoutes() {
 		if err := authzService.SeedDefaultPermissions(); err != nil {
 			r.logger.Error("Failed to seed default permissions", err)
 		}
+
+		// Public user endpoint
+		v1.POST("/users", userHandlers.AddUser)
 
 		// Organizations routes
 		orgs := v1.Group("/organizations")
@@ -189,12 +239,23 @@ func (r *Router) setupRoutes() {
 			// User routes
 			users := authenticated.Group("/users")
 			{
-				users.GET("", authzMiddleware.RequirePermission("user", "list"), r.ListUsers)
-				users.GET("/:id", authzMiddleware.RequireUserAccess(models.AccessLevelReadOnly), r.GetUser)
+				users.GET("", authzMiddleware.RequirePermission("user", "list"), userHandlers.ListUsers)
+				users.GET("/:id", authzMiddleware.RequireUserAccess(models.AccessLevelReadOnly), userHandlers.GetUser)
+
+				// User configuration endpoints
+				users.POST("/update-user-config", userConfigHandlers.UpdateUserConfig)
+
+				// Legacy user endpoints (these can be updated to use the new user handlers)
 				users.PUT("/:id", authzMiddleware.RequireUserAccess(models.AccessLevelModify), r.UpdateUser)
 				users.PUT("/:id/password", authzMiddleware.RequireUserAccess(models.AccessLevelModify), r.ChangePassword)
 				users.PUT("/:id/mfa", authzMiddleware.RequireUserAccess(models.AccessLevelModify), r.ConfigureMFA)
 				users.PUT("/:id/role", authzMiddleware.RequirePermission("user", "update"), r.UpdateUserRole)
+
+				// Recordings endpoints
+				users.GET("/:user_id/recordings", recordingsHandlers.GetUserRecordings)
+
+				// Meetings endpoints
+				users.GET("/:user_id/meetings", meetingsHandlers.GetUserMeetings)
 
 				userOrgs := users.Group("/:userId/managed-organizations")
 				userOrgs.Use(authzMiddleware.RequirePermission("organization", "list"))
@@ -204,6 +265,11 @@ func (r *Router) setupRoutes() {
 					userOrgs.DELETE("/:organizationId", authzMiddleware.RequirePermission("organization", "delete"), orgHandlers.UnassignOrganizationFromUser)
 				}
 			}
+
+			// File upload endpoint
+			authenticated.POST("/upload-spaces-v2", spacesHandlers.UploadSpacesV2)
+			authenticated.POST("/upload-spaces", spacesHandlers.UploadSpaces)
+			authenticated.GET("/spaces-health", spacesHandlers.SpacesHealth)
 
 			// Team routes
 			teams := authenticated.Group("/teams")
@@ -242,6 +308,35 @@ func (r *Router) setupRoutes() {
 				roles.PUT("/:roleName", authzHandlers.UpdateRole)
 				roles.DELETE("/:roleName", authzHandlers.DeleteRole)
 			}
+
+			// Meetings routes
+			meetings := authenticated.Group("/meetings")
+			{
+				meetings.POST("/setup", meetingsHandlers.SetupMeeting)
+				meetings.POST("/upcoming-meetings", meetingsHandlers.UpcomingMeetings)
+				meetings.POST("/add-custom-script", meetingsHandlers.AddCustomScript)
+				meetings.POST("/display-topics", meetingsHandlers.DisplayTopics)
+				meetings.POST("/get-custom-script", meetingsHandlers.GetCustomScript)
+				meetings.POST("/delete-custom-scripts", meetingsHandlers.DeleteCustomScripts)
+			}
 		}
 	}
+}
+
+// GoogleLogin handles Google OAuth login
+func (r *Router) GoogleLogin(c *gin.Context) {
+	handlers := NewGoogleAuthHandlers(r.googleAuthSvc)
+	handlers.Login(c)
+}
+
+// GoogleLogout handles Google OAuth logout
+func (r *Router) GoogleLogout(c *gin.Context) {
+	handlers := NewGoogleAuthHandlers(r.googleAuthSvc)
+	handlers.Logout(c)
+}
+
+// GoogleUser returns the current user's info from a Google auth token
+func (r *Router) GoogleUser(c *gin.Context) {
+	handlers := NewGoogleAuthHandlers(r.googleAuthSvc)
+	handlers.GetUserInfo(c)
 }

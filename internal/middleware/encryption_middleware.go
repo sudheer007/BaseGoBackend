@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"gobackend/internal/security"
@@ -208,7 +209,7 @@ func processSensitiveResponseFields(c *gin.Context, config *EncryptionConfig) {
 		rw.Header().Set("Content-Length", "0")
 		// Write the new response
 		rw.Header().Set("Content-Type", "application/json")
-		rw.Header().Set("Content-Length", string(len(newResp)))
+		rw.Header().Set("Content-Length", strconv.Itoa(len(newResp)))
 		rw.WriteHeader(http.StatusOK) // We have to explicitly set the status code
 		rw.Write(newResp)
 	}

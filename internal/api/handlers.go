@@ -64,7 +64,20 @@ func (r *Router) HealthCheck(c *gin.Context) {
 	})
 }
 
-// Login handles user login
+// Login handles user authentication
+// @Summary Authenticate a user
+// @Description Authenticate a user by checking their email and password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param user body auth.LoginRequest true "User login information (email, password)"
+// @Success 200 {object} auth.TokenResponse
+// @Failure 400 {object} ResponseError
+// @Failure 401 {object} ResponseError
+// @Failure 403 {object} ResponseError
+// @Failure 429 {object} ResponseError
+// @Failure 500 {object} ResponseError
+// @Router /api/v1/auth/login [post]
 func (r *Router) Login(c *gin.Context) {
 	var req auth.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -95,13 +108,26 @@ func (r *Router) Login(c *gin.Context) {
 			status = http.StatusTooManyRequests
 		}
 
-		c.JSON(status, ResponseError{
-			Error: err.Error(),
+		// Return a structured error response
+		c.JSON(status, gin.H{
+			"success": false,
+			"message": err.Error(),
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	// Return a successful response with JWT tokens
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"message":       "Login successful",
+		"access_token":  resp.AccessToken,
+		"refresh_token": resp.RefreshToken,
+		"expires_at":    resp.ExpiresAt,
+		"token_type":    resp.TokenType,
+		"user_id":       resp.UserID,
+		"tenant_id":     resp.TenantID,
+		"requires_mfa":  resp.RequiresMFA,
+	})
 }
 
 // RefreshToken handles token refresh
@@ -263,44 +289,6 @@ func (r *Router) ListAuditLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "List audit logs endpoint",
 	})
-}
-
-// Signup handles user registration
-func (r *Router) Signup(c *gin.Context) {
-	var req auth.SignupRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ResponseError{
-			Error: "Invalid request: " + err.Error(),
-		})
-		return
-	}
-
-	// Get client info for audit
-	ipAddress := middleware.ClientIP(c)
-	userAgent := c.GetHeader("User-Agent")
-
-	// Attempt signup
-	resp, err := r.authService.Signup(c.Request.Context(), req, ipAddress, userAgent)
-	if err != nil {
-		status := http.StatusInternalServerError
-
-		// Map specific errors to appropriate status codes
-		switch err {
-		case auth.ErrEmailAlreadyExists:
-			status = http.StatusConflict
-		case auth.ErrInvalidEmail, auth.ErrInvalidPassword:
-			status = http.StatusBadRequest
-		case auth.ErrTenantNotFound, auth.ErrOrganizationNotFound:
-			status = http.StatusNotFound
-		}
-
-		c.JSON(status, ResponseError{
-			Error: err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, resp)
 }
 
 // UpdateUserRoleRequest represents the request to update a user's role

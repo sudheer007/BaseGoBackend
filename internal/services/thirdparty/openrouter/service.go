@@ -160,6 +160,11 @@ type Error struct {
 	Code    string `json:"code"`
 }
 
+// Error implements the error interface
+func (e *Error) Error() string {
+	return e.Message
+}
+
 // CreateChatCompletion sends a chat completion request to the OpenRouter API
 func (s *Service) CreateChatCompletion(ctx context.Context, req ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	endpoint := fmt.Sprintf("%s/chat/completions", s.config.BaseURL)

@@ -98,12 +98,12 @@ func (h *Handler) HandleChatCompletion(c *gin.Context) {
 		errorMessage := "Failed to generate completion"
 
 		// Check for specific error types
-		var apiError *openrouter.Error
-		if errors.As(err, &apiError) {
-			if apiError.Code == "rate_limit_exceeded" {
+		var apiErr *openrouter.Error
+		if errors.As(err, &apiErr) && apiErr != nil {
+			if apiErr.Code == "rate_limit_exceeded" {
 				statusCode = http.StatusTooManyRequests
 				errorMessage = "Rate limit exceeded"
-			} else if apiError.Code == "invalid_api_key" {
+			} else if apiErr.Code == "invalid_api_key" {
 				statusCode = http.StatusUnauthorized
 				errorMessage = "Authentication failed"
 			}

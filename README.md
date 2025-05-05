@@ -198,13 +198,53 @@ Access the API at `http://localhost:PORT` (e.g., `http://localhost:8080`) and Sw
 
 ## Makefile Commands
 
-A `Makefile` is provided for convenience:
+```bash
+# Run the API locally
+make run
 
-*   `make run`: Run locally using `go run`.
-*   `make build`: Build the binary.
-*   `make test`: Run tests.
-*   `make clean`: Remove the built binary.
-*   `make help`: Show available commands.
+# Run all tests
+make test
+
+# Run tests with coverage analysis
+make test-coverage
+
+# Format code
+make fmt
+
+# Run linters
+make lint
+
+# Build the application (runs tests automatically)
+make build
+
+# Clean build artifacts
+make clean
+
+# Show all available commands
+make help
+```
+
+## Testing
+
+The project includes a comprehensive testing framework to ensure code quality and prevent regressions. For more information, see the [Testing Guidelines](docs/testing.md).
+
+### Key Testing Features
+
+- **Pre-Build Testing**: Tests are automatically run before each build.
+- **Table-Driven Tests**: Tests use a table-driven approach for clear and comprehensive test cases.
+- **Mocking**: Dependencies are mocked using the `testify/mock` package.
+- **Coverage Reports**: Test coverage reports can be generated using `make test-coverage`.
+- **CI Integration**: Tests are run automatically in CI environments using `make ci-test`.
+
+To run tests:
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage analysis
+make test-coverage
+```
 
 ## Security Considerations
 
