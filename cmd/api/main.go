@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"log"
@@ -21,10 +22,9 @@ import (
 	"gobackend/internal/services"
 	"gobackend/razorpay"
 
-	"crypto/tls"
-
 	"github.com/go-pg/pg/v10"
 	"github.com/go-redis/redis/v8"
+	_ "github.com/lib/pq"             // postgres driver for database/sql
 	_ "github.com/swaggo/files"       // swagger files
 	_ "github.com/swaggo/gin-swagger" // swagger generator
 )
