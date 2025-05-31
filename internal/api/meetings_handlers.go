@@ -88,16 +88,16 @@ func (h *MeetingsHandlers) SetupMeeting(c *gin.Context) {
 // @Tags meetings
 // @Accept json
 // @Produce json
-// @Param user_id path string true "User ID"
+// @Param id path string true "User ID"
 // @Security BearerAuth
 // @Success 200 {array} services.MeetingInfo
 // @Failure 400 {object} ResponseError
 // @Failure 401 {object} ResponseError
 // @Failure 500 {object} ResponseError
-// @Router /api/v1/users/{user_id}/meetings [get]
+// @Router /api/v1/users/{id}/meetings [get]
 func (h *MeetingsHandlers) GetUserMeetings(c *gin.Context) {
 	// Get the user ID from the URL parameter
-	userID := c.Param("user_id")
+	userID := c.Param("id")
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, ResponseError{
 			Error: "User ID is required",

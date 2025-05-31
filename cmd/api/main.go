@@ -17,6 +17,7 @@ import (
 	"gobackend/internal/audit"
 	"gobackend/internal/auth"
 	"gobackend/internal/config"
+	"gobackend/internal/database"
 	"gobackend/internal/jobs"
 	"gobackend/internal/observability"
 	"gobackend/internal/services"
@@ -143,6 +144,13 @@ func main() {
 	}
 	logger.Info("Database connection established")
 	defer db.Close()
+
+	// Create database schema (tables) if they don't exist
+	dbWrapper := &database.DB{DB: db, IsMock: false}
+	if err := dbWrapper.CreateSchema(); err != nil {
+		logger.Fatal("Failed to create database schema", err)
+	}
+	logger.Info("Database schema verified/created")
 
 	// Initialize Redis Client
 	var redisClient *redis.Client

@@ -252,10 +252,10 @@ func (r *Router) setupRoutes() {
 				users.PUT("/:id/role", authzMiddleware.RequirePermission("user", "update"), r.UpdateUserRole)
 
 				// Recordings endpoints
-				users.GET("/:user_id/recordings", recordingsHandlers.GetUserRecordings)
+				users.GET("/:id/recordings", recordingsHandlers.GetUserRecordings)
 
 				// Meetings endpoints
-				users.GET("/:user_id/meetings", meetingsHandlers.GetUserMeetings)
+				users.GET("/:id/meetings", meetingsHandlers.GetUserMeetings)
 
 				userOrgs := users.Group("/:userId/managed-organizations")
 				userOrgs.Use(authzMiddleware.RequirePermission("organization", "list"))

@@ -29,7 +29,7 @@ func NewRecordingsHandlers(recordingsService *services.RecordingsService) *Recor
 // @Tags recordings
 // @Accept json
 // @Produce json
-// @Param user_id path string true "User ID"
+// @Param id path string true "User ID"
 // @Param limit query int false "Maximum number of recordings to return"
 // @Param offset query int false "Number of recordings to skip"
 // @Security BearerAuth
@@ -38,10 +38,10 @@ func NewRecordingsHandlers(recordingsService *services.RecordingsService) *Recor
 // @Failure 401 {object} ResponseError
 // @Failure 403 {object} ResponseError
 // @Failure 500 {object} ResponseError
-// @Router /api/v1/users/{user_id}/recordings [get]
+// @Router /api/v1/users/{id}/recordings [get]
 func (h *RecordingsHandlers) GetUserRecordings(c *gin.Context) {
 	// Parse the user ID from the URL parameter
-	userIDStr := c.Param("user_id")
+	userIDStr := c.Param("id")
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseError{
@@ -114,4 +114,4 @@ func (h *RecordingsHandlers) GetUserRecordings(c *gin.Context) {
 
 	// Return the recordings
 	c.JSON(http.StatusOK, resp)
-} 
+}
