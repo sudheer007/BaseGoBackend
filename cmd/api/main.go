@@ -83,9 +83,9 @@ func main() {
 	docs.SwaggerInfo.Title = "GoBackend API"
 	docs.SwaggerInfo.Description = "A secure Go backend API with Organization CRUD operations"
 	docs.SwaggerInfo.Version = "1.0"
-	docs.SwaggerInfo.Host = "localhost:8080"
+	docs.SwaggerInfo.Host = "goapp-u5mew.ondigitalocean.app"
 	docs.SwaggerInfo.BasePath = ""
-	docs.SwaggerInfo.Schemes = []string{"http", "https"}
+	docs.SwaggerInfo.Schemes = []string{"https", "http"}
 
 	// Load configuration
 	cfg, err := config.Load()
