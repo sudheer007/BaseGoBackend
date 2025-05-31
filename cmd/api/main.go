@@ -21,6 +21,8 @@ import (
 	"gobackend/internal/services"
 	"gobackend/razorpay"
 
+	"crypto/tls"
+
 	"github.com/go-pg/pg/v10"
 	"github.com/go-redis/redis/v8"
 	_ "github.com/swaggo/files"       // swagger files
@@ -113,6 +115,22 @@ func main() {
 		Database: cfg.Database.Name,
 		PoolSize: cfg.Database.MaxConnections,
 	}
+
+	// Configure SSL/TLS if required
+	if cfg.Database.SSLMode == "require" || cfg.Database.SSLMode == "verify-ca" || cfg.Database.SSLMode == "verify-full" {
+		dbOpts.TLSConfig = &tls.Config{
+			InsecureSkipVerify: cfg.Database.SSLMode == "require", // For 'require', skip verification
+		}
+		logger.Info("TLS enabled for database connection", observability.Field{Key: "ssl_mode", Value: cfg.Database.SSLMode}.ToZapField())
+	} else {
+		logger.Info("TLS disabled for database connection", observability.Field{Key: "ssl_mode", Value: cfg.Database.SSLMode}.ToZapField())
+	}
+
+	logger.Info("Connecting to database",
+		observability.Field{Key: "db_addr", Value: dbOpts.Addr}.ToZapField(),
+		observability.Field{Key: "db_user", Value: dbOpts.User}.ToZapField(),
+	)
+
 	db := pg.Connect(dbOpts)
 
 	// Test DB connection
