@@ -31,7 +31,7 @@ import (
 // @license.name  Apache 2.0
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host  137.184.47.225:8080
+// @host  goapp-u5mew.ondigitalocean.app
 // @BasePath  /
 
 // @securityDefinitions.apikey BearerAuth
@@ -44,7 +44,7 @@ func main() {
 	docs.SwaggerInfo.Title = "GoBackend API"
 	docs.SwaggerInfo.Description = "A secure Go backend API with Organization CRUD operations"
 	docs.SwaggerInfo.Version = "1.0"
-	docs.SwaggerInfo.Host = "137.184.47.225:8080"
+	docs.SwaggerInfo.Host = "goapp-u5mew.ondigitalocean.app"
 	docs.SwaggerInfo.BasePath = ""
 	docs.SwaggerInfo.Schemes = []string{"http", "https"}
 
@@ -96,7 +96,7 @@ func main() {
 
 	// Start the server
 	fmt.Printf("Starting server on port %d...\n", cfg.App.Port)
-	fmt.Printf("Swagger documentation available at: http://137.184.47.225:8080/swagger/index.html\n", cfg.App.Port)
+	fmt.Printf("Swagger documentation available at: https://goapp-u5mew.ondigitalocean.app/swagger/index.html\n")
 	if err := router.Run(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

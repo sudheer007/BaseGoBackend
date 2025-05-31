@@ -171,7 +171,7 @@ definitions:
       sessionTimeoutMinutes:
         type: integer
     type: object
-host: 137.184.47.225:8080
+host: goapp-u5mew.ondigitalocean.app
 info:
   contact:
     email: support@example.com
