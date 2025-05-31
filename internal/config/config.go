@@ -76,7 +76,7 @@ type RedisConfig struct {
 	Port     int    `env:"REDIS_PORT" envDefault:"6379"`
 	Password string `env:"REDIS_PASSWORD" envDefault:""`
 	DB       int    `env:"REDIS_DB" envDefault:"0"`
-	Enabled  bool   `env:"REDIS_ENABLED" envDefault:"true"`
+	Enabled  bool   `env:"REDIS_ENABLED" envDefault:"false"`
 }
 
 // JWTConfig holds JWT configuration
@@ -213,7 +213,7 @@ func Load() (*Config, error) {
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASS", ""),
 			DB:       getEnvAsInt("REDIS_DB", 0),
-			Enabled:  getEnvAsBool("REDIS_ENABLED", true),
+			Enabled:  getEnvAsBool("REDIS_ENABLED", false),
 		},
 		JWT: JWTConfig{
 			Secret:         getEnv("JWT_SECRET", "insecure-jwt-secret"),

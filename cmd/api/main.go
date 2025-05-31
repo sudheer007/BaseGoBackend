@@ -155,13 +155,19 @@ func main() {
 		redisClient = redis.NewClient(redisOpts)
 		// Test Redis connection
 		if _, err := redisClient.Ping(context.Background()).Result(); err != nil {
-			logger.Fatal("Failed to connect to Redis", err,
+			logger.Warn("Failed to connect to Redis, continuing without Redis",
+				observability.Field{Key: "error", Value: err.Error()}.ToZapField(),
 				observability.Field{Key: "redis_host", Value: cfg.Redis.Host}.ToZapField(),
 				observability.Field{Key: "redis_port", Value: cfg.Redis.Port}.ToZapField(),
 			)
+			redisClient.Close()
+			redisClient = nil
+		} else {
+			logger.Info("Redis connection established")
+			defer redisClient.Close()
 		}
-		logger.Info("Redis connection established")
-		defer redisClient.Close()
+	} else {
+		logger.Info("Redis disabled in configuration")
 	}
 
 	// Initialize Encryption Service
