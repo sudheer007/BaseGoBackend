@@ -2,6 +2,7 @@ package api
 
 import (
 	"strconv"
+	"time"
 
 	"gobackend/internal/auth"
 	"gobackend/internal/config"
@@ -63,8 +64,38 @@ func (r *Router) setupMiddleware() {
 	// Security headers
 	r.Engine.Use(middleware.SecurityHeaders())
 
-	// CORS
-	r.Engine.Use(middleware.CORS(r.Config.CORS.AllowedOrigins))
+	// CORS - Use the comprehensive CORS middleware with proper HTTPS support
+	corsConfig := &middleware.CORSConfig{
+		AllowedOrigins: []string{
+			"https://goapp-u5mew.ondigitalocean.app",
+			"https://localhost:3000",
+			"http://localhost:3000",
+			"https://127.0.0.1:3000",
+			"http://127.0.0.1:3000",
+			"*", // Allow all origins for testing - remove in production
+		},
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Accept",
+			"Authorization",
+			"X-Request-ID",
+			"X-Requested-With",
+			"Access-Control-Allow-Origin",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+			"X-Request-ID",
+			"X-RateLimit-Limit",
+			"X-RateLimit-Remaining",
+			"X-RateLimit-Reset",
+		},
+		AllowCredentials: true,
+		AllowWildcard:    true,
+		MaxAge:           12 * time.Hour,
+	}
+	r.Engine.Use(middleware.CORSMiddleware(corsConfig))
 
 	// Rate limiting
 	rateLimiter := middleware.NewRateLimit()
